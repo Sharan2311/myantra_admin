@@ -177,7 +177,6 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
               </div>
             </div>
           ))}
-          </div>
         </div>)}
 
         <div style={{display:"flex",gap:10,marginTop:20}}>
