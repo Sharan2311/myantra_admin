@@ -13,12 +13,9 @@ const C = {
   blue:"#3b82f6",teal:"#14b8a6",
 };
 const fmt=n=>"₹"+Number(n||0).toLocaleString("en-IN");
-const ALL_FEATURES=["trips","vehicles","employees","driver_pay","di_scan","payment_scan","diesel_tab","tafal","pdf_reports","shortage_recovery","loan_ledger","party_billing","pump_portal","batch_di_scanner","gst_reconciliation","owner_reports","inbound_trips","expense_tracking","custom_branding","husk_manager"];
-const PLAN_PRESETS={basic:["trips","vehicles","employees","driver_pay","di_scan"],professional:["trips","vehicles","employees","driver_pay","di_scan","payment_scan","diesel_tab","tafal","pdf_reports","shortage_recovery","loan_ledger","expense_tracking"],enterprise:ALL_FEATURES};
 const PLAN_SCANS={basic:50,professional:200,enterprise:9999};
 const PLAN_FEES={basic:3000,professional:7000,enterprise:12000};
-const FEATURE_LABELS={trips:"Trips",vehicles:"Vehicles",employees:"Employees",driver_pay:"Driver Pay",di_scan:"DI Scan",payment_scan:"Payment Scan",diesel_tab:"Diesel",tafal:"TAFAL",pdf_reports:"PDF Reports",shortage_recovery:"Shortage Recovery",loan_ledger:"Loan Ledger",party_billing:"Party Billing",pump_portal:"Pump Portal",batch_di_scanner:"Batch DI Scanner",gst_reconciliation:"GST Reconciliation",owner_reports:"Owner Reports",inbound_trips:"Inbound Trips",expense_tracking:"Expense Tracking",custom_branding:"Custom Branding",husk_manager:"Husk Manager"};
-const FEATURE_TIERS={trips:"basic",vehicles:"basic",employees:"basic",driver_pay:"basic",di_scan:"basic",payment_scan:"pro",diesel_tab:"pro",tafal:"pro",pdf_reports:"pro",shortage_recovery:"pro",loan_ledger:"pro",expense_tracking:"pro",party_billing:"ent",pump_portal:"ent",batch_di_scanner:"ent",gst_reconciliation:"ent",owner_reports:"ent",inbound_trips:"ent",custom_branding:"ent",husk_manager:"ent"};
+const PLAN_ORDER={basic:0,pro:1,professional:1,enterprise:2};
 
 const Btn=({children,onClick,color=C.accent,outline,small,full,disabled})=>(<button onClick={onClick} disabled={disabled} style={{background:outline?"transparent":color,color:outline?color:"#fff",border:outline?`1.5px solid ${color}`:"none",borderRadius:8,padding:small?"6px 12px":"10px 18px",fontSize:small?12:14,fontWeight:700,cursor:disabled?"not-allowed":"pointer",opacity:disabled?0.5:1,width:full?"100%":"auto"}}>{children}</button>);
 const Badge=({label,color=C.muted})=>(<span style={{background:color+"22",color,fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:6}}>{label}</span>);
@@ -28,14 +25,31 @@ const Section=({title,color=C.accent,children})=>(<div style={{marginTop:20,marg
 
 function AdminLogin({onLogin}){const[pin,setPin]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);const go=async()=>{setLoading(true);setErr("");const{data}=await adminSupabase.from("admin_users").select("*").eq("pin",pin).eq("role","superadmin").single();setLoading(false);if(!data){setErr("Invalid PIN");return;}onLogin(data);};return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{background:C.card,borderRadius:16,padding:"40px 32px",width:340,textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:C.accent,marginBottom:4}}>M YANTRA</div><div style={{fontSize:11,color:C.muted,letterSpacing:3,marginBottom:30}}>ADMIN CONTROL</div><input value={pin} onChange={e=>setPin(e.target.value)} type="password" placeholder="Enter Admin PIN" onKeyDown={e=>e.key==="Enter"&&go()} style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:16,textAlign:"center",marginBottom:16,outline:"none",boxSizing:"border-box"}}/>{err&&<div style={{color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}<Btn onClick={go} full disabled={loading}>{loading?"Checking...":"Login →"}</Btn></div></div>);}
 
-function ClientEditor({client,features,onSave,onClose}){
+function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
   const[form,setForm]=useState({...client});
   const[biz,setBiz]=useState(client.business_config||{clients:[],defaultClient:"",defaultConsignee:"",shreeClients:[],lrPrefixes:{},clientAbbreviations:{},clientDetection:{},clientColors:{},bankType:"universal",placeMap:{},roles:{}});
   const[feats,setFeats]=useState({...features});
   const[saving,setSaving]=useState(false);
   const[activeTab,setActiveTab]=useState("details");
   const set=(k,v)=>setForm(p=>({...p,[k]:v}));
-  const applyPreset=plan=>{const preset=PLAN_PRESETS[plan]||[];const nf={};ALL_FEATURES.forEach(f=>{nf[f]=preset.includes(f);});setFeats(nf);set("plan",plan);set("scans_included",PLAN_SCANS[plan]||50);set("monthly_fee",PLAN_FEES[plan]||3000);};
+
+  // Build plan presets from featureDefs
+  const allFeatureKeys = featureDefs.map(d=>d.key);
+  const featureLabel = k => (featureDefs.find(d=>d.key===k)||{}).label || k;
+  const featureTier = k => { const d=featureDefs.find(d=>d.key===k); return d ? (d.min_plan==="basic"?"basic":d.min_plan==="pro"?"pro":"ent") : "ent"; };
+  const featureCat = k => (featureDefs.find(d=>d.key===k)||{}).category || "Other";
+  const planIncludes = (plan, minPlan) => {
+    const order = {basic:0, pro:1, professional:1, enterprise:2};
+    return (order[plan]||0) >= (order[minPlan]||0);
+  };
+  const applyPreset=plan=>{
+    const nf={};
+    featureDefs.forEach(d=>{nf[d.key]=planIncludes(plan,d.min_plan);});
+    setFeats(nf);
+    set("plan",plan);
+    set("scans_included",PLAN_SCANS[plan]||50);
+    set("monthly_fee",PLAN_FEES[plan]||3000);
+  };
 
   const handleSave=async()=>{
     setSaving(true);
@@ -51,7 +65,7 @@ function ClientEditor({client,features,onSave,onClose}){
       primary_color:form.primary_color,accent_color:form.accent_color,header_bg:form.header_bg,
       business_config:biz,
     }).eq("id",client.id);
-    for(const feat of ALL_FEATURES){
+    for(const feat of allFeatureKeys){
       await adminSupabase.from("client_features").upsert({client_id:client.id,feature:feat,enabled:feats[feat]===true,updated_at:new Date().toISOString()},{onConflict:"client_id,feature"});
     }
     setSaving(false);onSave();
@@ -148,12 +162,21 @@ function ClientEditor({client,features,onSave,onClose}){
               {["basic","professional","enterprise"].map(p=>(<Btn key={p} small outline={form.plan!==p} color={form.plan===p?C.green:C.muted} onClick={()=>applyPreset(p)}>{p.slice(0,3).toUpperCase()}</Btn>))}
             </div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-            {ALL_FEATURES.map(feat=>{const tier=FEATURE_TIERS[feat];const tc=tier==="basic"?C.green:tier==="pro"?C.blue:C.purple;return(
-              <div key={feat} onClick={()=>setFeats(p=>({...p,[feat]:!p[feat]}))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:feats[feat]?tc+"15":C.bg,border:`1px solid ${feats[feat]?tc+"55":C.border}`,borderRadius:8,cursor:"pointer"}}>
-                <div style={{width:18,height:18,borderRadius:4,background:feats[feat]?tc:"transparent",border:`2px solid ${feats[feat]?tc:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",flexShrink:0}}>{feats[feat]?"✓":""}</div>
-                <div><div style={{fontSize:12,color:C.text,fontWeight:feats[feat]?700:400}}>{FEATURE_LABELS[feat]}</div><div style={{fontSize:9,color:tc,textTransform:"uppercase"}}>{tier}</div></div>
-              </div>);})}
+          {[...new Set(featureDefs.map(d=>d.category))].map(cat=>(
+            <div key={cat} style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.accent,textTransform:"uppercase",letterSpacing:1,marginBottom:6,borderBottom:`1px solid ${C.border}33`,paddingBottom:4}}>{cat}</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                {featureDefs.filter(d=>d.category===cat).map(d=>{
+                  const tier=featureTier(d.key);const tc=tier==="basic"?C.green:tier==="pro"?C.blue:C.purple;
+                  return(
+                    <div key={d.key} onClick={()=>setFeats(p=>({...p,[d.key]:!p[d.key]}))} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:feats[d.key]?tc+"15":C.bg,border:`1px solid ${feats[d.key]?tc+"55":C.border}`,borderRadius:8,cursor:"pointer"}} title={d.description}>
+                      <div style={{width:18,height:18,borderRadius:4,background:feats[d.key]?tc:"transparent",border:`2px solid ${feats[d.key]?tc:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",flexShrink:0}}>{feats[d.key]?"✓":""}</div>
+                      <div><div style={{fontSize:12,color:C.text,fontWeight:feats[d.key]?700:400}}>{d.label}</div><div style={{fontSize:9,color:tc,textTransform:"uppercase"}}>{d.min_plan}</div></div>
+                    </div>);
+                })}
+              </div>
+            </div>
+          ))}
           </div>
         </div>)}
 
@@ -190,9 +213,11 @@ function AddClientModal({onSave,onClose}){
 
 export default function AdminApp(){
   const[admin,setAdmin]=useState(null);const[clients,setClients]=useState([]);const[allFeatures,setAllFeatures]=useState({});const[scanCounts,setScanCounts]=useState({});const[editing,setEditing]=useState(null);const[adding,setAdding]=useState(false);
+  const[featureDefs,setFeatureDefs]=useState([]);
   const load=useCallback(async()=>{
     const{data:cl}=await adminSupabase.from("clients").select("*").order("onboarded_at",{ascending:false});setClients(cl||[]);
     const{data:feats}=await adminSupabase.from("client_features").select("*");const map={};(feats||[]).forEach(f=>{if(!map[f.client_id])map[f.client_id]={};map[f.client_id][f.feature]=f.enabled;});setAllFeatures(map);
+    const{data:defs}=await adminSupabase.from("feature_definitions").select("*").eq("active",true).order("sort_order");setFeatureDefs(defs||[]);
     const som=new Date();som.setDate(1);som.setHours(0,0,0,0);const{data:scans}=await adminSupabase.from("client_scans").select("client_id").gte("scanned_at",som.toISOString());const counts={};(scans||[]).forEach(s=>{counts[s.client_id]=(counts[s.client_id]||0)+1;});setScanCounts(counts);
   },[]);
   useEffect(()=>{if(admin)load();},[admin,load]);
@@ -229,7 +254,7 @@ export default function AdminApp(){
         </div>);})}
       {clients.length===0&&<div style={{textAlign:"center",padding:40,color:C.muted}}>No transporters yet.</div>}
     </div>
-    {editing&&<ClientEditor client={editing} features={allFeatures[editing.id]||{}} onSave={()=>{setEditing(null);load();}} onClose={()=>setEditing(null)}/>}
-    {adding&&<AddClientModal onSave={()=>{setAdding(false);load();}} onClose={()=>setAdding(false)}/>}
+    {editing&&<ClientEditor client={editing} features={allFeatures[editing.id]||{}} featureDefs={featureDefs} onSave={()=>{setEditing(null);load();}} onClose={()=>setEditing(null)}/>}
+    {adding&&<AddClientModal featureDefs={featureDefs} onSave={()=>{setAdding(false);load();}} onClose={()=>setAdding(false)}/>}
   </div>);
 }
