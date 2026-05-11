@@ -21,6 +21,17 @@ const Btn=({children,onClick,color=C.accent,outline,small,full,disabled})=>(<but
 const Badge=({label,color=C.muted})=>(<span style={{background:color+"22",color,fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:6}}>{label}</span>);
 const KPI=({label,value,color=C.accent})=>(<div style={{background:C.card,borderRadius:12,padding:"14px 16px",flex:1,minWidth:120}}><div style={{fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:1}}>{label}</div><div style={{fontSize:22,fontWeight:800,color,marginTop:4}}>{value}</div></div>);
 const Field=({label,value,onChange,type="text",placeholder="",area,half})=>(<div style={{marginBottom:12,flex:half?1:undefined}}><div style={{fontSize:10,color:C.muted,fontWeight:700,marginBottom:4,textTransform:"uppercase"}}>{label}</div>{area?<textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={4} style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>:<input value={value||""} onChange={e=>onChange(type==="number"?+e.target.value:e.target.value)} type={type} placeholder={placeholder} style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>}</div>);
+const JsonField=({label,value,onChange,placeholder=""})=>{
+  const[raw,setRaw]=useState(JSON.stringify(value||{},null,2));
+  const[err,setErr]=useState(false);
+  const handleBlur=()=>{try{const parsed=JSON.parse(raw);onChange(parsed);setErr(false);}catch{setErr(true);}};
+  return(<div style={{marginBottom:12}}>
+    <div style={{fontSize:10,color:C.muted,fontWeight:700,marginBottom:4,textTransform:"uppercase"}}>{label}</div>
+    <textarea value={raw} onChange={e=>{setRaw(e.target.value);setErr(false);}} onBlur={handleBlur} placeholder={placeholder} rows={4}
+      style={{width:"100%",background:C.bg,border:`1px solid ${err?"#e74c3c":C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>
+    {err&&<div style={{fontSize:10,color:"#e74c3c",marginTop:2}}>Invalid JSON — fix and click outside to save</div>}
+  </div>);
+};
 const Section=({title,color=C.accent,children})=>(<div style={{marginTop:20,marginBottom:8}}><div style={{fontSize:12,fontWeight:800,color,marginBottom:10,borderBottom:`1px solid ${color}33`,paddingBottom:6}}>{title}</div>{children}</div>);
 
 function AdminLogin({onLogin}){const[pin,setPin]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);const go=async()=>{setLoading(true);setErr("");const{data}=await adminSupabase.from("admin_users").select("*").eq("pin",pin).eq("role","superadmin").single();setLoading(false);if(!data){setErr("Invalid PIN");return;}onLogin(data);};return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{background:C.card,borderRadius:16,padding:"40px 32px",width:340,textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:C.accent,marginBottom:4}}>M YANTRA</div><div style={{fontSize:11,color:C.muted,letterSpacing:3,marginBottom:30}}>ADMIN CONTROL</div><input value={pin} onChange={e=>setPin(e.target.value)} type="password" placeholder="Enter Admin PIN" onKeyDown={e=>e.key==="Enter"&&go()} style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:16,textAlign:"center",marginBottom:16,outline:"none",boxSizing:"border-box"}}/>{err&&<div style={{color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}<Btn onClick={go} full disabled={loading}>{loading?"Checking...":"Login →"}</Btn></div></div>);}
@@ -123,16 +134,16 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
             <Field label="Shree Clients (comma separated)" value={(biz.shreeClients||[]).join(", ")} onChange={v=>setBiz(p=>({...p,shreeClients:v.split(",").map(s=>s.trim()).filter(Boolean)}))}/>
           </Section>
           <Section title="LR PREFIXES (JSON)" color={C.purple}>
-            <Field label='{"Client|Material": "PREFIX"}' value={JSON.stringify(biz.lrPrefixes||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,lrPrefixes:JSON.parse(v)}));}catch{}}} area placeholder='{"ACC Cement|Cement": "ACC"}'/>
+            <JsonField label='{"Client|Material": "PREFIX"}' value={biz.lrPrefixes||{}} onChange={v=>setBiz(p=>({...p,lrPrefixes:v}))} placeholder='{"ACC Cement|Cement": "ACC"}'/>
           </Section>
           <Section title="CLIENT DETECTION KEYWORDS (JSON)" color={C.orange}>
-            <Field label='{"keyword": "Client Name"}' value={JSON.stringify(biz.clientDetection||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientDetection:JSON.parse(v)}));}catch{}}} area placeholder='{"ultratech": "Ultratech Malkhed"}'/>
+            <JsonField label='{"keyword": "Client Name"}' value={biz.clientDetection||{}} onChange={v=>setBiz(p=>({...p,clientDetection:v}))} placeholder='{"ultratech": "Ultratech Malkhed"}'/>
           </Section>
           <Section title="CLIENT ABBREVIATIONS (JSON)" color={C.teal}>
-            <Field label='{"Full ": "Short "}' value={JSON.stringify(biz.clientAbbreviations||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientAbbreviations:JSON.parse(v)}));}catch{}}} area/>
+            <JsonField label='{"Full ": "Short "}' value={biz.clientAbbreviations||{}} onChange={v=>setBiz(p=>({...p,clientAbbreviations:v}))}/>
           </Section>
           <Section title="CLIENT COLORS (JSON)" color={C.green}>
-            <Field label='{"keyword": "#hex"}' value={JSON.stringify(biz.clientColors||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientColors:JSON.parse(v)}));}catch{}}} area/>
+            <JsonField label='{"keyword": "#hex"}' value={biz.clientColors||{}} onChange={v=>setBiz(p=>({...p,clientColors:v}))}/>
           </Section>
           <Field label="Bank Type" value={biz.bankType||"universal"} onChange={v=>setBiz(p=>({...p,bankType:v}))} placeholder="universal / hdfc / sbi"/>
         </div>)}
