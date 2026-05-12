@@ -13,6 +13,83 @@ const C = {
   blue:"#3b82f6",teal:"#14b8a6",
 };
 const fmt=n=>"₹"+Number(n||0).toLocaleString("en-IN");
+
+// ── Phase 2: GST Invoice PDF Generator ──────────────────────────────────────
+function generateInvoiceHTML(inv, client) {
+  const cgst = Math.round((+inv.gst_amount||0)/2);
+  const sgst = cgst;
+  const amtWords = numberToWords(+inv.total_amount||0);
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invoice ${inv.invoice_no}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;padding:20px;max-width:800px;margin:0 auto;color:#1e293b}
+.hdr{display:flex;justify-content:space-between;border-bottom:3px solid #1565c0;padding-bottom:12px;margin-bottom:16px}
+.hdr h1{font-size:22px;color:#1565c0}.hdr .sub{font-size:11px;color:#64748b}
+.inv-title{text-align:center;font-size:18px;font-weight:800;color:#1565c0;margin:16px 0;text-transform:uppercase;letter-spacing:2px}
+table{width:100%;border-collapse:collapse;margin:12px 0}th,td{border:1px solid #cbd5e1;padding:8px 10px;font-size:12px;text-align:left}
+th{background:#f1f5f9;font-weight:700;font-size:11px;text-transform:uppercase;color:#475569}
+.right{text-align:right}.bold{font-weight:700}.total-row{background:#eff6ff;font-weight:800;font-size:14px}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.meta-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px}
+.meta-box h3{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.meta-box p{font-size:12px;line-height:1.6;color:#1e293b}
+.status{display:inline-block;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase}
+.status-paid{background:#dcfce7;color:#166534}.status-unpaid{background:#fee2e2;color:#991b1b}
+.footer{margin-top:24px;border-top:2px solid #e2e8f0;padding-top:12px;font-size:10px;color:#94a3b8;text-align:center}
+.words{background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:8px 12px;font-size:11px;color:#78350f;margin:8px 0}
+.bank{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;margin-top:12px}
+.bank h3{font-size:10px;color:#0369a1;text-transform:uppercase;margin-bottom:6px}
+.bank p{font-size:11px;color:#1e293b;line-height:1.6}
+@media print{body{padding:10px}button{display:none!important}}
+</style></head><body>
+<div class="hdr">
+  <div><h1>M YANTRA ENTERPRISES</h1><div class="sub">Transport Management Solutions<br/>Kodla, Sedam, Gulbarga, Karnataka<br/>GSTN: 29XXXXXXXXXXXZX</div></div>
+  <div style="text-align:right"><div class="sub">Phone: 9008420384<br/>Email: myantraenterprises@gmail.com</div></div>
+</div>
+<div class="inv-title">Tax Invoice</div>
+<div class="meta">
+  <div class="meta-box"><h3>Bill To</h3><p><b>${client.name||""}</b><br/>${client.owner_name||""}<br/>Phone: ${client.phone||"—"}<br/>Email: ${client.email||"—"}<br/>GSTN: ${client.gstn||"—"}<br/>PAN: ${client.pan||"—"}</p></div>
+  <div class="meta-box"><h3>Invoice Details</h3><p><b>Invoice No:</b> ${inv.invoice_no}<br/><b>Date:</b> ${inv.invoice_date}<br/><b>Period:</b> ${inv.billing_period}<br/><b>Type:</b> ${(inv.type||"").toUpperCase()}<br/><b>Status:</b> <span class="status ${inv.status==="paid"?"status-paid":"status-unpaid"}">${inv.status}</span>${inv.paid_ref?`<br/><b>Paid Ref:</b> ${inv.paid_ref}`:""}</p></div>
+</div>
+<table>
+  <tr><th style="width:40px">#</th><th>Description</th><th class="right" style="width:80px">HSN/SAC</th><th class="right" style="width:120px">Amount</th></tr>
+  <tr><td>1</td><td>${inv.description||inv.billing_period}</td><td class="right">998599</td><td class="right">${fmt(inv.base_amount)}</td></tr>
+  <tr><td colspan="3" class="right">Subtotal</td><td class="right bold">${fmt(inv.base_amount)}</td></tr>
+  <tr><td colspan="3" class="right">CGST @ ${(+inv.gst_rate||18)/2}%</td><td class="right">${fmt(cgst)}</td></tr>
+  <tr><td colspan="3" class="right">SGST @ ${(+inv.gst_rate||18)/2}%</td><td class="right">${fmt(sgst)}</td></tr>
+  <tr class="total-row"><td colspan="3" class="right">Total Amount</td><td class="right">${fmt(inv.total_amount)}</td></tr>
+</table>
+<div class="words"><b>Amount in words:</b> ${amtWords} Only</div>
+<div class="bank"><h3>Bank Details (for payment)</h3><p><b>Account Name:</b> M Yantra Enterprises<br/><b>Bank:</b> HDFC Bank<br/><b>Account No:</b> XXXXXXXXXX<br/><b>IFSC:</b> HDFC0XXXXXX<br/><b>UPI:</b> myantra@hdfcbank</p></div>
+<div class="footer">This is a computer-generated invoice. · M Yantra Enterprises · myantraenterprises@gmail.com</div>
+<br/><button onclick="window.print()" style="background:#1565c0;color:#fff;border:none;border-radius:8px;padding:12px 24px;font-size:14px;font-weight:700;cursor:pointer;display:block;margin:0 auto">🖨️ Print / Save PDF</button>
+</body></html>`;
+}
+
+function numberToWords(n) {
+  if(n===0) return "Zero Rupees";
+  const ones=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"];
+  const tens=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
+  const convert = (num) => {
+    if(num<20) return ones[num];
+    if(num<100) return tens[Math.floor(num/10)]+(num%10?" "+ones[num%10]:"");
+    if(num<1000) return ones[Math.floor(num/100)]+" Hundred"+(num%100?" "+convert(num%100):"");
+    if(num<100000) return convert(Math.floor(num/1000))+" Thousand"+(num%1000?" "+convert(num%1000):"");
+    if(num<10000000) return convert(Math.floor(num/100000))+" Lakh"+(num%100000?" "+convert(num%100000):"");
+    return convert(Math.floor(num/10000000))+" Crore"+(num%10000000?" "+convert(num%10000000):"");
+  };
+  const rupees = Math.floor(n);
+  const paise = Math.round((n-rupees)*100);
+  let result = convert(rupees) + " Rupees";
+  if(paise>0) result += " and " + convert(paise) + " Paise";
+  return result;
+}
+
+function openInvoicePDF(inv, client) {
+  const html = generateInvoiceHTML(inv, client);
+  const w = window.open("", "_blank", "width=850,height=1100");
+  w.document.write(html);
+  w.document.close();
+}
 const PLAN_SCANS={basic:50,professional:200,enterprise:9999};
 const PLAN_FEES={basic:3000,professional:7000,enterprise:12000};
 const PLAN_ORDER={basic:0,pro:1,professional:1,enterprise:2};
@@ -218,10 +295,18 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
         {/* ═══ BILLING TAB ═══ */}
         {activeTab==="billing"&&(<div>
           {(()=>{
-            const totalBilled = invoices.reduce((s,i)=>s+(+i.total_amount||0),0);
-            const totalPaid = invoices.filter(i=>i.status==="paid").reduce((s,i)=>s+(+i.paid_amount||+i.total_amount||0),0);
-            const outstanding = invoices.filter(i=>i.status==="unpaid").reduce((s,i)=>s+(+i.total_amount||0),0);
-            const onboardingDone = invoices.some(i=>i.type==="onboarding");
+            const [invFrom, setInvFrom] = [form._invFrom||"", v=>set("_invFrom",v)];
+            const [invTo, setInvTo] = [form._invTo||"", v=>set("_invTo",v)];
+            const filtered = invoices.filter(i=>{
+              if(invFrom && i.invoice_date < invFrom) return false;
+              if(invTo && i.invoice_date > invTo) return false;
+              return true;
+            });
+            const activeInvs = filtered.filter(i=>i.status!=="cancelled");
+            const totalBilled = activeInvs.reduce((s,i)=>s+(+i.total_amount||0),0);
+            const totalPaid = activeInvs.filter(i=>i.status==="paid").reduce((s,i)=>s+(+i.paid_amount||+i.total_amount||0),0);
+            const outstanding = activeInvs.filter(i=>i.status==="unpaid").reduce((s,i)=>s+(+i.total_amount||0),0);
+            const onboardingDone = invoices.some(i=>i.type==="onboarding"&&i.status!=="cancelled");
 
             const createInvoice = async (type, baseAmt, desc) => {
               const gstRate = 18;
@@ -277,6 +362,26 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
                 </div>
               </div>
 
+              {/* Date filters */}
+              <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+                <div><div style={{fontSize:9,color:C.muted,fontWeight:700}}>FROM</div><input type="date" value={invFrom} onChange={e=>setInvFrom(e.target.value)} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 8px",color:C.text,fontSize:11}}/></div>
+                <div><div style={{fontSize:9,color:C.muted,fontWeight:700}}>TO</div><input type="date" value={invTo} onChange={e=>setInvTo(e.target.value)} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"5px 8px",color:C.text,fontSize:11}}/></div>
+                <Btn small outline color={C.muted} onClick={()=>{setInvFrom("");setInvTo("");}}>All</Btn>
+                <Btn small outline color={C.muted} onClick={()=>{const d=new Date();setInvFrom(new Date(d.getFullYear(),d.getMonth(),1).toISOString().split("T")[0]);setInvTo(d.toISOString().split("T")[0]);}}>This Month</Btn>
+                <Btn small outline color={C.muted} onClick={()=>{const d=new Date();const fy=d.getMonth()>=3?d.getFullYear():d.getFullYear()-1;setInvFrom(`${fy}-04-01`);setInvTo(d.toISOString().split("T")[0]);}}>This FY</Btn>
+                <Btn small outline color={C.accent} onClick={()=>{
+                  const rows=activeInvs.map(i=>`<tr><td>${i.invoice_no}</td><td>${i.invoice_date}</td><td>${i.billing_period}</td><td>${i.type}</td><td style="text-align:right">${fmt(i.base_amount)}</td><td style="text-align:right">${fmt(i.gst_amount)}</td><td style="text-align:right"><b>${fmt(i.total_amount)}</b></td><td>${i.status}</td><td>${i.paid_ref||"—"}</td></tr>`).join("");
+                  const html=`<!DOCTYPE html><html><head><title>Billing — ${form.name}</title><style>*{font-family:Arial,sans-serif}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:6px 8px}th{background:#f1f5f9;text-align:left}.right{text-align:right}h2{color:#1565c0}.summary{display:flex;gap:30px;margin:12px 0}.summary div{text-align:center}.summary .n{font-size:20px;font-weight:800}@media print{button{display:none!important}}</style></head><body>
+<div style="display:flex;align-items:center;gap:12px;border-bottom:3px solid #1565c0;padding-bottom:10px;margin-bottom:12px"><div style="font-size:22px;font-weight:900;color:#1565c0">M YANTRA ENTERPRISES</div><div style="font-size:11px;color:#64748b">Transport Management Solutions</div></div>
+<h2>Billing Report — ${form.name}</h2><p>${invFrom||"All time"} to ${invTo||"Present"} · Plan: ${form.plan} · ${form.billing_cycle||"monthly"}</p>
+<div class="summary"><div><div class="n">${fmt(totalBilled)}</div>Billed</div><div><div class="n" style="color:green">${fmt(totalPaid)}</div>Paid</div><div><div class="n" style="color:${outstanding>0?"red":"green"}">${fmt(outstanding)}</div>Outstanding</div></div>
+<table><tr><th>Invoice</th><th>Date</th><th>Period</th><th>Type</th><th class="right">Base</th><th class="right">GST</th><th class="right">Total</th><th>Status</th><th>Ref</th></tr>${rows}</table>
+<p style="font-size:10px;color:#94a3b8;margin-top:20px">Generated by M Yantra Admin · ${new Date().toLocaleString()}</p>
+<br/><button onclick="window.print()" style="background:#1565c0;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px">🖨 Print</button></body></html>`;
+                  const w=window.open("","_blank","width=900,height=700");w.document.write(html);w.document.close();
+                }}>🖨 Report</Btn>
+              </div>
+
               {/* Quick create buttons */}
               <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Create Invoice</div>
               <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -303,10 +408,10 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
 
               {/* Invoice list */}
               <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>
-                Invoices ({invoices.length}) {invLoading && "⏳"}
+                Invoices ({filtered.length}{filtered.length!==invoices.length?` of ${invoices.length}`:""}) {invLoading && "⏳"}
               </div>
-              {invoices.length===0 && <div style={{color:C.muted,fontSize:12,padding:20,textAlign:"center"}}>No invoices yet</div>}
-              {invoices.map(inv=>{
+              {filtered.length===0 && <div style={{color:C.muted,fontSize:12,padding:20,textAlign:"center"}}>No invoices{invFrom||invTo?" in this date range":""}</div>}
+              {filtered.map(inv=>{
                 const sc = inv.status==="paid"?C.green:inv.status==="cancelled"?C.muted:C.red;
                 return (
                   <div key={inv.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",marginBottom:6,
@@ -339,7 +444,13 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
                     {inv.status==="unpaid" && (
                       <div style={{display:"flex",gap:6,marginTop:8}}>
                         <Btn small color={C.green} onClick={()=>markPaid(inv)}>✅ Mark Paid</Btn>
+                        <Btn small outline color={C.accent} onClick={()=>openInvoicePDF(inv, form)}>📄 Invoice</Btn>
                         <Btn small outline color={C.red} onClick={()=>cancelInvoice(inv)}>Cancel</Btn>
+                      </div>
+                    )}
+                    {inv.status==="paid" && (
+                      <div style={{display:"flex",gap:6,marginTop:8}}>
+                        <Btn small outline color={C.accent} onClick={()=>openInvoicePDF(inv, form)}>📄 Invoice</Btn>
                       </div>
                     )}
                   </div>
@@ -384,12 +495,17 @@ export default function AdminApp(){
   const[admin,setAdmin]=useState(null);const[clients,setClients]=useState([]);const[allFeatures,setAllFeatures]=useState({});const[scanCounts,setScanCounts]=useState({});const[editing,setEditing]=useState(null);const[adding,setAdding]=useState(false);
   const[featureDefs,setFeatureDefs]=useState([]);
   const[subPayments,setSubPayments]=useState([]);
+  const[allInvoices,setAllInvoices]=useState([]);
+  const[showBillingReport,setShowBillingReport]=useState(false);
+  const[reportFrom,setReportFrom]=useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().split("T")[0]);
+  const[reportTo,setReportTo]=useState(new Date().toISOString().split("T")[0]);
   const load=useCallback(async()=>{
     const{data:cl}=await adminSupabase.from("clients").select("*").order("onboarded_at",{ascending:false});setClients(cl||[]);
     const{data:feats}=await adminSupabase.from("client_features").select("*");const map={};(feats||[]).forEach(f=>{if(!map[f.client_id])map[f.client_id]={};map[f.client_id][f.feature]=f.enabled;});setAllFeatures(map);
     const{data:defs}=await adminSupabase.from("feature_definitions").select("*").eq("active",true).order("sort_order");setFeatureDefs(defs||[]);
     const som=new Date();som.setDate(1);som.setHours(0,0,0,0);const{data:scans}=await adminSupabase.from("client_scans").select("client_id").gte("scanned_at",som.toISOString());const counts={};(scans||[]).forEach(s=>{counts[s.client_id]=(counts[s.client_id]||0)+1;});setScanCounts(counts);
     const{data:payments}=await adminSupabase.from("subscription_payments").select("*").order("submitted_at",{ascending:false}).limit(50);setSubPayments(payments||[]);
+    const{data:invs}=await adminSupabase.from("subscription_invoices").select("*").order("created_at",{ascending:false});setAllInvoices(invs||[]);
   },[]);
   useEffect(()=>{if(admin)load();},[admin,load]);
   if(!admin)return<AdminLogin onLogin={setAdmin}/>;
@@ -405,8 +521,90 @@ export default function AdminApp(){
     </div>
     <div style={{padding:"0 20px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div style={{fontSize:15,fontWeight:800}}>🚛 Transporters ({clients.length})</div>
-      <Btn onClick={()=>setAdding(true)} color={C.green} small>➕ Add Transporter</Btn>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={()=>setShowBillingReport(!showBillingReport)} small outline color={showBillingReport?C.accent:C.muted}>
+          {showBillingReport?"✕ Close":"📊 Billing Report"}
+        </Btn>
+        <Btn onClick={()=>setAdding(true)} color={C.green} small>➕ Add Transporter</Btn>
+      </div>
     </div>
+
+    {/* ═══ GLOBAL BILLING REPORT ═══ */}
+    {showBillingReport&&(
+      <div style={{padding:"0 20px 16px"}}>
+        <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:16}}>
+          <div style={{fontSize:14,fontWeight:800,color:C.accent,marginBottom:12}}>📊 Billing Report</div>
+          {/* Date filters */}
+          <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
+            <div><div style={{fontSize:9,color:C.muted,fontWeight:700}}>FROM</div><input type="date" value={reportFrom} onChange={e=>setReportFrom(e.target.value)} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 10px",color:C.text,fontSize:12}}/></div>
+            <div><div style={{fontSize:9,color:C.muted,fontWeight:700}}>TO</div><input type="date" value={reportTo} onChange={e=>setReportTo(e.target.value)} style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,padding:"6px 10px",color:C.text,fontSize:12}}/></div>
+            <Btn small outline color={C.muted} onClick={()=>{const d=new Date();setReportFrom(new Date(d.getFullYear(),d.getMonth(),1).toISOString().split("T")[0]);setReportTo(d.toISOString().split("T")[0]);}}>This Month</Btn>
+            <Btn small outline color={C.muted} onClick={()=>{const d=new Date();const fy=d.getMonth()>=3?d.getFullYear():d.getFullYear()-1;setReportFrom(`${fy}-04-01`);setReportTo(d.toISOString().split("T")[0]);}}>This FY</Btn>
+            <Btn small outline color={C.muted} onClick={()=>{setReportFrom("2020-01-01");setReportTo("2030-12-31");}}>All Time</Btn>
+          </div>
+          {(()=>{
+            const filtered = allInvoices.filter(i=>i.invoice_date>=reportFrom && i.invoice_date<=reportTo);
+            const totalBilled = filtered.reduce((s,i)=>s+(+i.total_amount||0),0);
+            const totalPaid = filtered.filter(i=>i.status==="paid").reduce((s,i)=>s+(+i.total_amount||0),0);
+            const totalUnpaid = filtered.filter(i=>i.status==="unpaid").reduce((s,i)=>s+(+i.total_amount||0),0);
+            const totalGST = filtered.reduce((s,i)=>s+(+i.gst_amount||0),0);
+            // Group by client
+            const byClient = {};
+            filtered.forEach(i=>{const cn=clients.find(c=>c.id===i.client_id)?.name||"Unknown";if(!byClient[cn])byClient[cn]={billed:0,paid:0,unpaid:0,count:0};byClient[cn].count++;byClient[cn].billed+=(+i.total_amount||0);if(i.status==="paid")byClient[cn].paid+=(+i.total_amount||0);if(i.status==="unpaid")byClient[cn].unpaid+=(+i.total_amount||0);});
+            return (<>
+              {/* Summary */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:C.accent}}>{fmt(totalBilled)}</div><div style={{fontSize:9,color:C.muted}}>BILLED ({filtered.length})</div></div>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:C.green}}>{fmt(totalPaid)}</div><div style={{fontSize:9,color:C.muted}}>COLLECTED</div></div>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:totalUnpaid>0?C.red:C.green}}>{fmt(totalUnpaid)}</div><div style={{fontSize:9,color:C.muted}}>OUTSTANDING</div></div>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:C.teal}}>{fmt(totalGST)}</div><div style={{fontSize:9,color:C.muted}}>GST COLLECTED</div></div>
+              </div>
+              {/* Per-client breakdown */}
+              <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Per Client</div>
+              {Object.entries(byClient).map(([name,d])=>(
+                <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:C.bg,borderRadius:6,marginBottom:4,fontSize:12}}>
+                  <span style={{fontWeight:600,color:C.text}}>{name} <span style={{color:C.muted,fontWeight:400}}>({d.count})</span></span>
+                  <div style={{display:"flex",gap:16}}>
+                    <span style={{color:C.accent}}>{fmt(d.billed)}</span>
+                    <span style={{color:C.green}}>{fmt(d.paid)}</span>
+                    {d.unpaid>0&&<span style={{color:C.red}}>{fmt(d.unpaid)} due</span>}
+                  </div>
+                </div>
+              ))}
+              {/* Invoice table */}
+              <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginTop:12,marginBottom:6}}>Invoices ({filtered.length})</div>
+              <div style={{maxHeight:300,overflowY:"auto"}}>
+                {filtered.map(inv=>{
+                  const cl=clients.find(c=>c.id===inv.client_id);const sc=inv.status==="paid"?C.green:inv.status==="cancelled"?C.muted:C.red;
+                  return(
+                    <div key={inv.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",borderBottom:`1px solid ${C.border}33`,fontSize:12}}>
+                      <div style={{flex:1}}>
+                        <span style={{fontWeight:700,marginRight:8}}>{inv.invoice_no}</span>
+                        <span style={{color:C.muted}}>{cl?.name||"—"}</span>
+                        <span style={{fontSize:9,color:sc,marginLeft:6,fontWeight:700}}>{inv.status.toUpperCase()}</span>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{color:C.text,fontWeight:600}}>{fmt(inv.total_amount)}</span>
+                        <span style={{color:C.muted,fontSize:10}}>{inv.invoice_date}</span>
+                        <span onClick={(e)=>{e.stopPropagation();openInvoicePDF(inv,cl||{});}} style={{cursor:"pointer",fontSize:10,color:C.accent}}>📄</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Print report button */}
+              <div style={{marginTop:12,textAlign:"center"}}>
+                <Btn small outline color={C.accent} onClick={()=>{
+                  const rows=filtered.map(i=>`<tr><td>${i.invoice_no}</td><td>${clients.find(c=>c.id===i.client_id)?.name||""}</td><td>${i.invoice_date}</td><td>${i.type}</td><td style="text-align:right">${fmt(i.base_amount)}</td><td style="text-align:right">${fmt(i.gst_amount)}</td><td style="text-align:right"><b>${fmt(i.total_amount)}</b></td><td>${i.status}</td><td>${i.paid_ref||"—"}</td></tr>`).join("");
+                  const html=`<!DOCTYPE html><html><head><title>Billing Report</title><style>*{font-family:Arial,sans-serif}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:6px 8px}th{background:#f1f5f9;text-align:left}h2{color:#1565c0}.summary{display:flex;gap:20px;margin:12px 0}.summary div{text-align:center}.summary .n{font-size:18px;font-weight:800}@media print{button{display:none!important}}</style></head><body><h2>M Yantra — Billing Report</h2><p>${reportFrom} to ${reportTo}</p><div class="summary"><div><div class="n">${fmt(totalBilled)}</div>Billed</div><div><div class="n" style="color:green">${fmt(totalPaid)}</div>Collected</div><div><div class="n" style="color:${totalUnpaid>0?"red":"green"}">${fmt(totalUnpaid)}</div>Outstanding</div><div><div class="n" style="color:teal">${fmt(totalGST)}</div>GST</div></div><table><tr><th>Invoice</th><th>Client</th><th>Date</th><th>Type</th><th>Base</th><th>GST</th><th>Total</th><th>Status</th><th>Ref</th></tr>${rows}</table><br/><button onclick="window.print()" style="background:#1565c0;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:13px">🖨 Print</button></body></html>`;
+                  const w=window.open("","_blank","width=900,height=700");w.document.write(html);w.document.close();
+                }}>🖨 Print Report</Btn>
+              </div>
+            </>);
+          })()}
+        </div>
+      </div>
+    )}
 
     {/* ── Pending Payment Reviews ── */}
     {(()=>{
@@ -428,6 +626,11 @@ export default function AdminApp(){
         if(!window.confirm(`Approve ₹${(pay.amount||0).toLocaleString("en-IN")} from ${cl.name}?\n\nPaid until will be set to: ${nextStr}\n\nProceed?`)) return;
         await adminSupabase.from("subscription_payments").update({status:"approved",reviewed_at:new Date().toISOString(),reviewed_by:admin.name}).eq("id",pay.id);
         await adminSupabase.from("clients").update({paid_until:nextStr,last_payment_date:pay.payment_date||new Date().toISOString().split("T")[0],last_payment_amount:pay.amount,last_payment_ref:pay.utr||""}).eq("id",pay.client_id);
+        // Auto-mark the latest unpaid invoice as paid
+        const{data:unpaidInvs}=await adminSupabase.from("subscription_invoices").select("id").eq("client_id",pay.client_id).eq("status","unpaid").order("created_at",{ascending:false}).limit(1);
+        if(unpaidInvs&&unpaidInvs[0]){
+          await adminSupabase.from("subscription_invoices").update({status:"paid",paid_date:new Date().toISOString().split("T")[0],paid_amount:pay.amount,paid_ref:pay.utr||"",payment_id:pay.id}).eq("id",unpaidInvs[0].id);
+        }
         load();
       };
       const rejectPayment = async (pay) => {
