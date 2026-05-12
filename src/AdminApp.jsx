@@ -21,17 +21,6 @@ const Btn=({children,onClick,color=C.accent,outline,small,full,disabled})=>(<but
 const Badge=({label,color=C.muted})=>(<span style={{background:color+"22",color,fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:6}}>{label}</span>);
 const KPI=({label,value,color=C.accent})=>(<div style={{background:C.card,borderRadius:12,padding:"14px 16px",flex:1,minWidth:120}}><div style={{fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:1}}>{label}</div><div style={{fontSize:22,fontWeight:800,color,marginTop:4}}>{value}</div></div>);
 const Field=({label,value,onChange,type="text",placeholder="",area,half})=>(<div style={{marginBottom:12,flex:half?1:undefined}}><div style={{fontSize:10,color:C.muted,fontWeight:700,marginBottom:4,textTransform:"uppercase"}}>{label}</div>{area?<textarea value={value||""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={4} style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>:<input value={value||""} onChange={e=>onChange(type==="number"?+e.target.value:e.target.value)} type={type} placeholder={placeholder} style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>}</div>);
-const JsonField=({label,value,onChange,placeholder=""})=>{
-  const[raw,setRaw]=useState(JSON.stringify(value||{},null,2));
-  const[err,setErr]=useState(false);
-  const handleBlur=()=>{try{const parsed=JSON.parse(raw);onChange(parsed);setErr(false);}catch{setErr(true);}};
-  return(<div style={{marginBottom:12}}>
-    <div style={{fontSize:10,color:C.muted,fontWeight:700,marginBottom:4,textTransform:"uppercase"}}>{label}</div>
-    <textarea value={raw} onChange={e=>{setRaw(e.target.value);setErr(false);}} onBlur={handleBlur} placeholder={placeholder} rows={4}
-      style={{width:"100%",background:C.bg,border:`1px solid ${err?"#e74c3c":C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"monospace",resize:"vertical"}}/>
-    {err&&<div style={{fontSize:10,color:"#e74c3c",marginTop:2}}>Invalid JSON — fix and click outside to save</div>}
-  </div>);
-};
 const Section=({title,color=C.accent,children})=>(<div style={{marginTop:20,marginBottom:8}}><div style={{fontSize:12,fontWeight:800,color,marginBottom:10,borderBottom:`1px solid ${color}33`,paddingBottom:6}}>{title}</div>{children}</div>);
 
 function AdminLogin({onLogin}){const[pin,setPin]=useState("");const[err,setErr]=useState("");const[loading,setLoading]=useState(false);const go=async()=>{setLoading(true);setErr("");const{data}=await adminSupabase.from("admin_users").select("*").eq("pin",pin).eq("role","superadmin").single();setLoading(false);if(!data){setErr("Invalid PIN");return;}onLogin(data);};return(<div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{background:C.card,borderRadius:16,padding:"40px 32px",width:340,textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:C.accent,marginBottom:4}}>M YANTRA</div><div style={{fontSize:11,color:C.muted,letterSpacing:3,marginBottom:30}}>ADMIN CONTROL</div><input value={pin} onChange={e=>setPin(e.target.value)} type="password" placeholder="Enter Admin PIN" onKeyDown={e=>e.key==="Enter"&&go()} style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",color:C.text,fontSize:16,textAlign:"center",marginBottom:16,outline:"none",boxSizing:"border-box"}}/>{err&&<div style={{color:C.red,fontSize:12,marginBottom:12}}>{err}</div>}<Btn onClick={go} full disabled={loading}>{loading?"Checking...":"Login →"}</Btn></div></div>);}
@@ -67,6 +56,9 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
     await adminSupabase.from("clients").update({
       name:form.name,slug:form.slug,owner_name:form.owner_name,phone:form.phone,email:form.email,
       plan:form.plan,status:form.status,scans_included:form.scans_included,
+      paid_until:form.paid_until||null,billing_cycle:form.billing_cycle||"monthly",
+      payment_bypass:form.payment_bypass||false,
+      last_payment_date:form.last_payment_date||null,last_payment_ref:form.last_payment_ref||"",
       supabase_url:form.supabase_url,supabase_key:form.supabase_key,
       netlify_site:form.netlify_site,subdomain:form.subdomain,git_branch:form.git_branch,
       monthly_fee:form.monthly_fee,onboarding_fee:form.onboarding_fee,notes:form.notes,
@@ -112,6 +104,27 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
             <Field label="Monthly Fee ₹" value={form.monthly_fee} onChange={v=>set("monthly_fee",v)} type="number"/>
             <Field label="Scans Included" value={form.scans_included} onChange={v=>set("scans_included",v)} type="number"/>
           </div>
+          <div style={{fontSize:10,color:C.purple,fontWeight:700,marginTop:12,marginBottom:8,textTransform:"uppercase",letterSpacing:1,borderTop:`1px solid ${C.border}`,paddingTop:12}}>💳 Payment Gate</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Paid Until (YYYY-MM-DD)" value={form.paid_until||""} onChange={v=>set("paid_until",v)} placeholder="2026-06-30"/>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,color:C.muted,fontWeight:700,marginBottom:4,textTransform:"uppercase"}}>Billing Cycle</div>
+              <select value={form.billing_cycle||"monthly"} onChange={e=>set("billing_cycle",e.target.value)}
+                style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13}}>
+                <option value="monthly">Monthly</option>
+                <option value="quarterly">Quarterly</option>
+                <option value="yearly">Yearly</option>
+              </select>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Field label="Last Payment Date" value={form.last_payment_date||""} onChange={v=>set("last_payment_date",v)} placeholder="2026-05-01"/>
+            <Field label="Last Payment Ref" value={form.last_payment_ref||""} onChange={v=>set("last_payment_ref",v)} placeholder="UTR / Cheque No"/>
+          </div>
+          <div onClick={()=>set("payment_bypass",!form.payment_bypass)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:form.payment_bypass?C.green+"15":C.bg,border:`1px solid ${form.payment_bypass?C.green:C.border}`,borderRadius:8,cursor:"pointer",marginBottom:12}}>
+            <div style={{width:20,height:20,borderRadius:4,background:form.payment_bypass?C.green:"transparent",border:`2px solid ${form.payment_bypass?C.green:C.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff"}}>{form.payment_bypass?"✓":""}</div>
+            <div><div style={{fontSize:12,fontWeight:600,color:C.text}}>Bypass Payment Check</div><div style={{fontSize:10,color:C.muted}}>App works even without payment (e.g. your own transport)</div></div>
+          </div>
           <Field label="Notes" value={form.notes} onChange={v=>set("notes",v)}/>
         </div>)}
 
@@ -134,16 +147,16 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
             <Field label="Shree Clients (comma separated)" value={(biz.shreeClients||[]).join(", ")} onChange={v=>setBiz(p=>({...p,shreeClients:v.split(",").map(s=>s.trim()).filter(Boolean)}))}/>
           </Section>
           <Section title="LR PREFIXES (JSON)" color={C.purple}>
-            <JsonField label='{"Client|Material": "PREFIX"}' value={biz.lrPrefixes||{}} onChange={v=>setBiz(p=>({...p,lrPrefixes:v}))} placeholder='{"ACC Cement|Cement": "ACC"}'/>
+            <Field label='{"Client|Material": "PREFIX"}' value={JSON.stringify(biz.lrPrefixes||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,lrPrefixes:JSON.parse(v)}));}catch{}}} area placeholder='{"ACC Cement|Cement": "ACC"}'/>
           </Section>
           <Section title="CLIENT DETECTION KEYWORDS (JSON)" color={C.orange}>
-            <JsonField label='{"keyword": "Client Name"}' value={biz.clientDetection||{}} onChange={v=>setBiz(p=>({...p,clientDetection:v}))} placeholder='{"ultratech": "Ultratech Malkhed"}'/>
+            <Field label='{"keyword": "Client Name"}' value={JSON.stringify(biz.clientDetection||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientDetection:JSON.parse(v)}));}catch{}}} area placeholder='{"ultratech": "Ultratech Malkhed"}'/>
           </Section>
           <Section title="CLIENT ABBREVIATIONS (JSON)" color={C.teal}>
-            <JsonField label='{"Full ": "Short "}' value={biz.clientAbbreviations||{}} onChange={v=>setBiz(p=>({...p,clientAbbreviations:v}))}/>
+            <Field label='{"Full ": "Short "}' value={JSON.stringify(biz.clientAbbreviations||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientAbbreviations:JSON.parse(v)}));}catch{}}} area/>
           </Section>
           <Section title="CLIENT COLORS (JSON)" color={C.green}>
-            <JsonField label='{"keyword": "#hex"}' value={biz.clientColors||{}} onChange={v=>setBiz(p=>({...p,clientColors:v}))}/>
+            <Field label='{"keyword": "#hex"}' value={JSON.stringify(biz.clientColors||{},null,2)} onChange={v=>{try{setBiz(p=>({...p,clientColors:JSON.parse(v)}));}catch{}}} area/>
           </Section>
           <Field label="Bank Type" value={biz.bankType||"universal"} onChange={v=>setBiz(p=>({...p,bankType:v}))} placeholder="universal / hdfc / sbi"/>
         </div>)}
@@ -224,11 +237,13 @@ function AddClientModal({onSave,onClose}){
 export default function AdminApp(){
   const[admin,setAdmin]=useState(null);const[clients,setClients]=useState([]);const[allFeatures,setAllFeatures]=useState({});const[scanCounts,setScanCounts]=useState({});const[editing,setEditing]=useState(null);const[adding,setAdding]=useState(false);
   const[featureDefs,setFeatureDefs]=useState([]);
+  const[subPayments,setSubPayments]=useState([]);
   const load=useCallback(async()=>{
     const{data:cl}=await adminSupabase.from("clients").select("*").order("onboarded_at",{ascending:false});setClients(cl||[]);
     const{data:feats}=await adminSupabase.from("client_features").select("*");const map={};(feats||[]).forEach(f=>{if(!map[f.client_id])map[f.client_id]={};map[f.client_id][f.feature]=f.enabled;});setAllFeatures(map);
     const{data:defs}=await adminSupabase.from("feature_definitions").select("*").eq("active",true).order("sort_order");setFeatureDefs(defs||[]);
     const som=new Date();som.setDate(1);som.setHours(0,0,0,0);const{data:scans}=await adminSupabase.from("client_scans").select("client_id").gte("scanned_at",som.toISOString());const counts={};(scans||[]).forEach(s=>{counts[s.client_id]=(counts[s.client_id]||0)+1;});setScanCounts(counts);
+    const{data:payments}=await adminSupabase.from("subscription_payments").select("*").order("submitted_at",{ascending:false}).limit(50);setSubPayments(payments||[]);
   },[]);
   useEffect(()=>{if(admin)load();},[admin,load]);
   if(!admin)return<AdminLogin onLogin={setAdmin}/>;
@@ -246,15 +261,81 @@ export default function AdminApp(){
       <div style={{fontSize:15,fontWeight:800}}>🚛 Transporters ({clients.length})</div>
       <Btn onClick={()=>setAdding(true)} color={C.green} small>➕ Add Transporter</Btn>
     </div>
+
+    {/* ── Pending Payment Reviews ── */}
+    {(()=>{
+      const pending = subPayments.filter(p=>p.status==="pending");
+      if(pending.length===0) return null;
+      const approvePayment = async (pay) => {
+        const cl = clients.find(c=>c.id===pay.client_id);
+        if(!cl) return;
+        // Calculate next paid_until based on billing cycle
+        const cycle = cl.billing_cycle || "monthly";
+        const base = cl.paid_until ? new Date(cl.paid_until) : new Date();
+        const from = base < new Date() ? new Date() : base;
+        const next = new Date(from);
+        if(cycle==="yearly") next.setFullYear(next.getFullYear()+1);
+        else if(cycle==="quarterly") next.setMonth(next.getMonth()+3);
+        else next.setMonth(next.getMonth()+1);
+        const nextStr = next.toISOString().split("T")[0];
+
+        if(!window.confirm(`Approve ₹${(pay.amount||0).toLocaleString("en-IN")} from ${cl.name}?\n\nPaid until will be set to: ${nextStr}\n\nProceed?`)) return;
+        await adminSupabase.from("subscription_payments").update({status:"approved",reviewed_at:new Date().toISOString(),reviewed_by:admin.name}).eq("id",pay.id);
+        await adminSupabase.from("clients").update({paid_until:nextStr,last_payment_date:pay.payment_date||new Date().toISOString().split("T")[0],last_payment_amount:pay.amount,last_payment_ref:pay.utr||""}).eq("id",pay.client_id);
+        load();
+      };
+      const rejectPayment = async (pay) => {
+        const reason = window.prompt("Rejection reason:");
+        if(reason===null) return;
+        await adminSupabase.from("subscription_payments").update({status:"rejected",notes:reason,reviewed_at:new Date().toISOString(),reviewed_by:admin.name}).eq("id",pay.id);
+        load();
+      };
+      return (
+        <div style={{padding:"0 20px 12px"}}>
+          <div style={{background:"#451a03",border:"1px solid #f59e0b55",borderRadius:12,padding:16}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#fbbf24",marginBottom:12}}>💳 Pending Payment Reviews ({pending.length})</div>
+            {pending.map(pay=>{
+              const cl = clients.find(c=>c.id===pay.client_id);
+              return (
+                <div key={pay.id} style={{background:"#1e293b",borderRadius:10,padding:14,marginBottom:8,border:"1px solid #334155"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:700,color:"#fff"}}>{cl?.name||"Unknown"}</div>
+                      <div style={{fontSize:11,color:"#94a3b8"}}>{cl?.plan} plan · {cl?.billing_cycle||"monthly"}</div>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:18,fontWeight:800,color:"#34d399"}}>₹{(pay.amount||0).toLocaleString("en-IN")}</div>
+                      <div style={{fontSize:10,color:"#94a3b8"}}>{pay.utr||"No UTR"} · {pay.payment_date||"—"}</div>
+                    </div>
+                  </div>
+                  {pay.screenshot_base64 && (
+                    <div style={{marginBottom:8,textAlign:"center"}}>
+                      <img src={pay.screenshot_base64} alt="Payment proof" style={{maxWidth:"100%",maxHeight:200,borderRadius:8,border:"1px solid #334155"}}/>
+                    </div>
+                  )}
+                  {pay.notes&&<div style={{fontSize:11,color:"#94a3b8",marginBottom:8}}>Note: {pay.notes}</div>}
+                  <div style={{display:"flex",gap:8}}>
+                    <Btn onClick={()=>approvePayment(pay)} color={C.green} full small>✅ Approve & Activate</Btn>
+                    <Btn onClick={()=>rejectPayment(pay)} color={C.red} outline small>❌ Reject</Btn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    })()}
     <div style={{padding:"0 20px 40px"}}>
-      {clients.map(c=>{const feats=allFeatures[c.id]||{};const ec=Object.values(feats).filter(Boolean).length;const scans=scanCounts[c.id]||0;const sp=c.scans_included?Math.round((scans/c.scans_included)*100):0;
-        return(<div key={c.id} onClick={()=>setEditing(c)} style={{background:C.card,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+      {clients.map(c=>{const feats=allFeatures[c.id]||{};const ec=Object.values(feats).filter(Boolean).length;const scans=scanCounts[c.id]||0;const sp=c.scans_included?Math.round((scans/c.scans_included)*100):0;const isPaid=c.payment_bypass||(c.monthly_fee===0)||!!(c.paid_until&&new Date(c.paid_until)>=new Date());const isOverdue=!c.payment_bypass&&(c.monthly_fee||0)>0&&(!c.paid_until||new Date(c.paid_until)<new Date());
+        return(<div key={c.id} onClick={()=>setEditing(c)} style={{background:C.card,borderRadius:12,padding:"14px 16px",marginBottom:8,cursor:"pointer",border:`1px solid ${isOverdue?C.red+"55":C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
               {c.logo_base64?<img src={c.logo_base64} alt="" style={{width:28,height:28,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:28,height:28,borderRadius:"50%",background:c.accent_color||C.teal,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:900,color:"#fff"}}>{c.company_short||c.name?.slice(0,2)||"?"}</div>}
               <span style={{fontSize:15,fontWeight:700}}>{c.name}</span><Badge label={c.status} color={sc(c.status)}/><Badge label={c.plan||"basic"} color={pc(c.plan)}/>
+              {isOverdue&&<Badge label="PAYMENT DUE" color={C.red}/>}
+              {c.payment_bypass&&<Badge label="BYPASS" color={C.orange}/>}
             </div>
-            <div style={{fontSize:11,color:C.muted}}>{c.owner_name||"—"} · {c.phone||"—"} · {c.subdomain||c.netlify_site||"no domain"}</div>
+            <div style={{fontSize:11,color:C.muted}}>{c.owner_name||"—"} · {c.phone||"—"} · {c.subdomain||c.netlify_site||"no domain"}{c.paid_until?` · Paid until: ${c.paid_until}`:""}</div>
           </div>
           <div style={{display:"flex",gap:16,alignItems:"center",flexShrink:0}}>
             <div style={{textAlign:"center"}}><div style={{fontSize:16,fontWeight:800,color:C.accent}}>{ec}</div><div style={{fontSize:9,color:C.muted}}>FEATURES</div></div>
