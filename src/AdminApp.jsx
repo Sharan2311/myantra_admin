@@ -31,7 +31,19 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
   const[feats,setFeats]=useState({...features});
   const[saving,setSaving]=useState(false);
   const[activeTab,setActiveTab]=useState("details");
+  const[invoices,setInvoices]=useState([]);
+  const[invLoading,setInvLoading]=useState(false);
   const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  // Fetch invoices for this client
+  useEffect(()=>{
+    (async()=>{
+      setInvLoading(true);
+      const{data}=await adminSupabase.from("subscription_invoices").select("*").eq("client_id",client.id).order("created_at",{ascending:false});
+      setInvoices(data||[]);
+      setInvLoading(false);
+    })();
+  },[client.id]);
 
   // Build plan presets from featureDefs
   const allFeatureKeys = featureDefs.map(d=>d.key);
@@ -74,7 +86,7 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
     setSaving(false);onSave();
   };
 
-  const tabs=[{id:"details",label:"📋 Details"},{id:"branding",label:"🎨 Branding"},{id:"business",label:"🏭 Business"},{id:"api",label:"🔑 API & DB"},{id:"features",label:"⚡ Features"}];
+  const tabs=[{id:"details",label:"📋 Details"},{id:"branding",label:"🎨 Branding"},{id:"business",label:"🏭 Business"},{id:"api",label:"🔑 API & DB"},{id:"features",label:"⚡ Features"},{id:"billing",label:"💰 Billing"}];
 
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:999,display:"flex",justifyContent:"center",overflowY:"auto",padding:"20px 16px"}}>
@@ -201,6 +213,140 @@ function ClientEditor({client,features,featureDefs=[],onSave,onClose}){
               </div>
             </div>
           ))}
+        </div>)}
+
+        {/* ═══ BILLING TAB ═══ */}
+        {activeTab==="billing"&&(<div>
+          {(()=>{
+            const totalBilled = invoices.reduce((s,i)=>s+(+i.total_amount||0),0);
+            const totalPaid = invoices.filter(i=>i.status==="paid").reduce((s,i)=>s+(+i.paid_amount||+i.total_amount||0),0);
+            const outstanding = invoices.filter(i=>i.status==="unpaid").reduce((s,i)=>s+(+i.total_amount||0),0);
+            const onboardingDone = invoices.some(i=>i.type==="onboarding");
+
+            const createInvoice = async (type, baseAmt, desc) => {
+              const gstRate = 18;
+              const gstAmt = Math.round(baseAmt * gstRate / 100);
+              const total = baseAmt + gstAmt;
+              const{data:invNo} = await adminSupabase.rpc("get_next_invoice_no");
+              if(!invNo){alert("Failed to generate invoice number");return;}
+              const now = new Date();
+              const period = type==="onboarding" ? "Onboarding" : now.toLocaleString("en-US",{month:"long",year:"numeric"});
+              const{error} = await adminSupabase.from("subscription_invoices").insert({
+                client_id: client.id, invoice_no: invNo, invoice_date: now.toISOString().split("T")[0],
+                billing_period: period, type, description: desc || `${type.charAt(0).toUpperCase()+type.slice(1)} — ${form.name}`,
+                base_amount: baseAmt, gst_rate: gstRate, gst_amount: gstAmt, total_amount: total,
+                status: "unpaid", created_by: "admin",
+              });
+              if(error){alert("Error: "+error.message);return;}
+              const{data:updated}=await adminSupabase.from("subscription_invoices").select("*").eq("client_id",client.id).order("created_at",{ascending:false});
+              setInvoices(updated||[]);
+            };
+
+            const markPaid = async (inv) => {
+              const ref = window.prompt("Payment reference (UTR/Cheque):", "");
+              if(ref===null) return;
+              await adminSupabase.from("subscription_invoices").update({
+                status:"paid", paid_date:new Date().toISOString().split("T")[0],
+                paid_amount:inv.total_amount, paid_ref:ref
+              }).eq("id",inv.id);
+              const{data:updated}=await adminSupabase.from("subscription_invoices").select("*").eq("client_id",client.id).order("created_at",{ascending:false});
+              setInvoices(updated||[]);
+            };
+
+            const cancelInvoice = async (inv) => {
+              if(!window.confirm(`Cancel invoice ${inv.invoice_no}?`)) return;
+              await adminSupabase.from("subscription_invoices").update({status:"cancelled"}).eq("id",inv.id);
+              const{data:updated}=await adminSupabase.from("subscription_invoices").select("*").eq("client_id",client.id).order("created_at",{ascending:false});
+              setInvoices(updated||[]);
+            };
+
+            return (<>
+              {/* Summary cards */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:C.accent}}>{fmt(totalBilled)}</div>
+                  <div style={{fontSize:9,color:C.muted}}>TOTAL BILLED</div>
+                </div>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:C.green}}>{fmt(totalPaid)}</div>
+                  <div style={{fontSize:9,color:C.muted}}>TOTAL PAID</div>
+                </div>
+                <div style={{background:C.bg,borderRadius:8,padding:10,textAlign:"center"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:outstanding>0?C.red:C.green}}>{fmt(outstanding)}</div>
+                  <div style={{fontSize:9,color:C.muted}}>OUTSTANDING</div>
+                </div>
+              </div>
+
+              {/* Quick create buttons */}
+              <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Create Invoice</div>
+              <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
+                {!onboardingDone && (
+                  <Btn small color={C.purple} onClick={()=>{
+                    const amt = +window.prompt("Onboarding fee (base amount before GST):", "100000");
+                    if(!amt) return;
+                    createInvoice("onboarding", amt, `Onboarding fee — ${form.name}`);
+                  }}>🏁 Onboarding</Btn>
+                )}
+                <Btn small color={C.teal} onClick={()=>createInvoice("monthly", +(form.monthly_fee||0), `Monthly subscription — ${form.name}`)}>
+                  📅 Monthly ₹{fmt(+(form.monthly_fee||0))}
+                </Btn>
+                <Btn small color={C.blue} onClick={()=>createInvoice("quarterly", +(form.monthly_fee||0)*3, `Quarterly — ${form.name}`)}>
+                  📊 Quarterly
+                </Btn>
+                <Btn small outline color={C.muted} onClick={()=>{
+                  const amt = +window.prompt("Custom amount (base before GST):", "");
+                  const desc = window.prompt("Description:", "");
+                  if(!amt) return;
+                  createInvoice("custom", amt, desc||"Custom invoice");
+                }}>➕ Custom</Btn>
+              </div>
+
+              {/* Invoice list */}
+              <div style={{fontSize:10,color:C.muted,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>
+                Invoices ({invoices.length}) {invLoading && "⏳"}
+              </div>
+              {invoices.length===0 && <div style={{color:C.muted,fontSize:12,padding:20,textAlign:"center"}}>No invoices yet</div>}
+              {invoices.map(inv=>{
+                const sc = inv.status==="paid"?C.green:inv.status==="cancelled"?C.muted:C.red;
+                return (
+                  <div key={inv.id} style={{background:C.bg,borderRadius:10,padding:"12px 14px",marginBottom:6,
+                    border:`1px solid ${inv.status==="unpaid"?C.red+"44":C.border}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:13,fontWeight:700,color:C.text}}>{inv.invoice_no}</span>
+                          <span style={{fontSize:9,fontWeight:800,color:sc,background:sc+"22",padding:"2px 6px",
+                            borderRadius:4,textTransform:"uppercase"}}>{inv.status}</span>
+                          <span style={{fontSize:9,color:C.muted,background:C.card2,padding:"2px 6px",
+                            borderRadius:4,textTransform:"uppercase"}}>{inv.type}</span>
+                        </div>
+                        <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                          {inv.invoice_date} · {inv.billing_period}
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:15,fontWeight:800,color:inv.status==="paid"?C.green:C.text}}>
+                          ₹{(+inv.total_amount||0).toLocaleString("en-IN")}
+                        </div>
+                        <div style={{fontSize:9,color:C.muted}}>
+                          Base ₹{(+inv.base_amount||0).toLocaleString("en-IN")} + GST ₹{(+inv.gst_amount||0).toLocaleString("en-IN")}
+                        </div>
+                      </div>
+                    </div>
+                    {inv.status==="paid" && inv.paid_ref && (
+                      <div style={{fontSize:10,color:C.green,marginTop:4}}>✅ Paid: {inv.paid_date} · Ref: {inv.paid_ref}</div>
+                    )}
+                    {inv.status==="unpaid" && (
+                      <div style={{display:"flex",gap:6,marginTop:8}}>
+                        <Btn small color={C.green} onClick={()=>markPaid(inv)}>✅ Mark Paid</Btn>
+                        <Btn small outline color={C.red} onClick={()=>cancelInvoice(inv)}>Cancel</Btn>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>);
+          })()}
         </div>)}
 
         <div style={{display:"flex",gap:10,marginTop:20}}>
